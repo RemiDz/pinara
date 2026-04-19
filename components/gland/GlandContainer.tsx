@@ -24,9 +24,16 @@ export function GlandContainer(props: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void chooseGlandPath().then((p) => {
-      if (!cancelled) setPath(p);
-    });
+    chooseGlandPath()
+      .then((p) => {
+        if (!cancelled) setPath(p);
+      })
+      .catch(() => {
+        // Capability probe should never throw, but if it does we fall
+        // back to the no-3D message rather than letting the gland tree
+        // unmount with an unhandled rejection.
+        if (!cancelled) setPath("none");
+      });
     return () => {
       cancelled = true;
     };

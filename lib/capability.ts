@@ -69,82 +69,100 @@ const FALSE_MATRIX: Capabilities = {
   isSafari: false,
 };
 
+/** Defensive boolean probe — never throws, even if a Web API is misbehaving. */
+function safeBool(probe: () => boolean): boolean {
+  try {
+    return !!probe();
+  } catch {
+    return false;
+  }
+}
+
 export function detectCapabilities(): Capabilities {
   if (typeof window === "undefined") return { ...FALSE_MATRIX };
 
-  const nav = window.navigator;
-  const ua = nav.userAgent ?? "";
+  try {
+    const nav = window.navigator;
+    const ua = nav.userAgent ?? "";
 
-  const isIos = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
-  const isAndroid = /Android/.test(ua);
-  const isSafari =
-    /^((?!chrome|android).)*safari/i.test(ua) ||
-    (isIos && /AppleWebKit/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua));
+    const isIos = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
+    const isAndroid = /Android/.test(ua);
+    const isSafari =
+      /^((?!chrome|android).)*safari/i.test(ua) ||
+      (isIos && /AppleWebKit/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua));
 
-  const isStandalonePwa =
-    window.matchMedia?.("(display-mode: standalone)").matches ||
-    // iOS Safari special property
-    (nav as unknown as { standalone?: boolean }).standalone === true;
+    const isStandalonePwa = safeBool(() => {
+      const mm = window.matchMedia?.bind(window);
+      const standalone = mm ? mm("(display-mode: standalone)").matches : false;
+      const iosStandalone =
+        (nav as unknown as { standalone?: boolean }).standalone === true;
+      return standalone || iosStandalone;
+    });
 
-  const webgl2 = (() => {
-    try {
+    const webgl2 = safeBool(() => {
       const c = document.createElement("canvas");
       return !!c.getContext("webgl2");
-    } catch {
-      return false;
-    }
-  })();
+    });
 
-  const webaudio = typeof window.AudioContext !== "undefined" ||
-    typeof (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext !== "undefined";
+    const webaudio =
+      typeof window.AudioContext !== "undefined" ||
+      typeof (window as unknown as { webkitAudioContext?: unknown })
+        .webkitAudioContext !== "undefined";
 
-  const audioWorklet = (() => {
-    if (!webaudio) return false;
-    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return false;
-    return typeof Ctor.prototype.audioWorklet !== "undefined" ||
-      "audioWorklet" in (Ctor.prototype as unknown as Record<string, unknown>);
-  })();
+    // BaseAudioContext.prototype.audioWorklet is a WebIDL getter that
+    // throws "Illegal invocation" when accessed without a real instance.
+    // Use the `in` operator only — it inspects the property descriptor
+    // without invoking the getter.
+    const audioWorklet = safeBool(() => {
+      if (!webaudio) return false;
+      const Ctor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      return !!Ctor && "audioWorklet" in Ctor.prototype;
+    });
 
-  // Web Bluetooth, MIDI, NFC are Chromium-only; iOS Safari returns undefined.
-  const webBluetooth = "bluetooth" in nav;
-  const webMidi = typeof (nav as unknown as { requestMIDIAccess?: unknown }).requestMIDIAccess === "function";
-  const webNfc = "NDEFReader" in window;
-  const webXr = "xr" in nav;
-
-  const ambientLightSensor = "AmbientLightSensor" in window;
-
-  return {
-    webgpu: "gpu" in nav,
-    webgl2,
-    webaudio,
-    audioWorklet,
-    deviceOrientation: "DeviceOrientationEvent" in window,
-    deviceMotion: "DeviceMotionEvent" in window,
-    ambientLightSensor,
-    wakeLock: "wakeLock" in nav,
-    vibration: typeof nav.vibrate === "function",
-    webBluetooth,
-    webMidi,
-    webNfc,
-    webXr,
-    serviceWorker: "serviceWorker" in nav,
-    pushApi: "PushManager" in window,
-    notifications: "Notification" in window,
-    badging: "setAppBadge" in nav,
-    pictureInPicture: "pictureInPictureEnabled" in document,
-    speechRecognition:
-      "SpeechRecognition" in window ||
-      "webkitSpeechRecognition" in window,
-    paymentRequest: "PaymentRequest" in window,
-    fileSystemAccess: "showOpenFilePicker" in window,
-    hasMediaDevices: !!nav.mediaDevices?.getUserMedia,
-    hasTorch: isAndroid ? "likely" : isIos ? "no" : "unknown",
-    isStandalonePwa,
-    isIos,
-    isAndroid,
-    isSafari,
-  };
+    return {
+      webgpu: safeBool(() => "gpu" in nav),
+      webgl2,
+      webaudio,
+      audioWorklet,
+      deviceOrientation: safeBool(() => "DeviceOrientationEvent" in window),
+      deviceMotion: safeBool(() => "DeviceMotionEvent" in window),
+      ambientLightSensor: safeBool(() => "AmbientLightSensor" in window),
+      wakeLock: safeBool(() => "wakeLock" in nav),
+      vibration: safeBool(() => typeof nav.vibrate === "function"),
+      webBluetooth: safeBool(() => "bluetooth" in nav),
+      webMidi: safeBool(
+        () =>
+          typeof (nav as unknown as { requestMIDIAccess?: unknown })
+            .requestMIDIAccess === "function",
+      ),
+      webNfc: safeBool(() => "NDEFReader" in window),
+      webXr: safeBool(() => "xr" in nav),
+      serviceWorker: safeBool(() => "serviceWorker" in nav),
+      pushApi: safeBool(() => "PushManager" in window),
+      notifications: safeBool(() => "Notification" in window),
+      badging: safeBool(() => "setAppBadge" in nav),
+      pictureInPicture: safeBool(() => "pictureInPictureEnabled" in document),
+      speechRecognition: safeBool(
+        () =>
+          "SpeechRecognition" in window || "webkitSpeechRecognition" in window,
+      ),
+      paymentRequest: safeBool(() => "PaymentRequest" in window),
+      fileSystemAccess: safeBool(() => "showOpenFilePicker" in window),
+      hasMediaDevices: safeBool(() => !!nav.mediaDevices?.getUserMedia),
+      hasTorch: isAndroid ? "likely" : isIos ? "no" : "unknown",
+      isStandalonePwa,
+      isIos,
+      isAndroid,
+      isSafari,
+    };
+  } catch {
+    // If anything goes catastrophically wrong, return a safe matrix
+    // rather than letting the capability probe take down the gland.
+    return { ...FALSE_MATRIX };
+  }
 }
 
 // Minimal structural type for what we actually use of WebGPU. Avoids
