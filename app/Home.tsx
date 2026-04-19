@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CosmicProvider, useCosmic } from "@/components/cosmic/CosmicContext";
+import { BiometricProvider } from "@/components/biometrics/BiometricContext";
 import { I18nProvider, useI18n } from "@/lib/i18n-react";
 import { GlandContainer } from "@/components/gland/GlandContainer";
 import { IntentSelector } from "@/components/session/IntentSelector";
@@ -197,7 +198,9 @@ export function Home({ locale }: { locale: Locale }) {
   return (
     <I18nProvider locale={locale}>
       <CosmicProvider>
-        <Inner />
+        <BiometricProvider>
+          <Inner />
+        </BiometricProvider>
       </CosmicProvider>
     </I18nProvider>
   );

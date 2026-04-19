@@ -19,6 +19,7 @@ import * as THREE from "three";
 import vert from "./shaders/gland.vert.glsl";
 import frag from "./shaders/gland.frag.glsl";
 import { useCosmic } from "@/components/cosmic/CosmicContext";
+import { useBiometrics } from "@/components/biometrics/BiometricContext";
 import { ParticleField } from "./ParticleField";
 import type { IntentDefinition } from "@/lib/intent";
 
@@ -58,6 +59,10 @@ declare module "@react-three/fiber" {
   }
 }
 
+function clamp(x: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, x));
+}
+
 export type GlandWebGLProps = {
   intent: IntentDefinition;
   /** 0..1 — dimmer for darkness mode */
@@ -71,6 +76,7 @@ function GlandMesh({ intent, intensity, inSession }: GlandWebGLProps) {
   const meshRef = useRef<THREE.Mesh | null>(null);
 
   const { schumann } = useCosmic();
+  const bio = useBiometrics();
 
   const colors = useMemo(
     () => ({
@@ -87,13 +93,21 @@ function GlandMesh({ intent, intensity, inSession }: GlandWebGLProps) {
     const t = state.clock.elapsedTime;
     u.uTime.value = t;
 
-    // Idle 12 BPM breath, session 6 BPM (target coherence).
-    const breathBpm = inSession ? 6 : 12;
+    // Breath: prefer measured rate when biometrics are live, otherwise
+    // synthesise idle 12 BPM / session 6 BPM.
+    const measuredBreathBpm = bio?.breath?.bpm ?? null;
+    const breathBpm = measuredBreathBpm ?? (inSession ? 6 : 12);
     const breath = 0.5 + 0.5 * Math.sin((2 * Math.PI * breathBpm * t) / 60);
     u.uBreath.value = breath;
 
-    // Idle 60 BPM heart pulse, gentle in session.
-    const pulseBpm = inSession ? 50 : 60;
+    // Heart pulse: prefer measured HRV BPM (clamped to a sane range)
+    // when the camera stream is delivering signal, otherwise the
+    // synthetic resting/session pulse.
+    const measuredHrvBpm =
+      bio?.hrv?.bpm != null && bio.hrv.signalQuality > 0.3
+        ? clamp(bio.hrv.bpm, 40, 180)
+        : null;
+    const pulseBpm = measuredHrvBpm ?? (inSession ? 50 : 60);
     const pulse = Math.max(0, Math.sin((2 * Math.PI * pulseBpm * t) / 60));
     u.uPulse.value = Math.pow(pulse, 4);
 
