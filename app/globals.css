@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: #000;
+  color: #C4CAD0;
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Dyslexia-aware: never disable text selection. */
+  -webkit-user-select: text;
+  user-select: text;
+  /* iOS Safari: avoid the white flash when changing background. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(232, 184, 109, 0.35);
+  color: #fff;
+}
+
+/* No scrollbars, ever — per quality bar in mega spec §16. */
+*::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Focus ring uses pineal-gold but only for keyboard nav. */
+:focus-visible {
+  outline: 2px solid #E8B86D;
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
