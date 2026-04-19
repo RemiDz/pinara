@@ -3,14 +3,9 @@
 /**
  * BiometricContext — React surface over the live biometric streams.
  *
- * Lifecycle is explicit: streams attach when the consumer calls
- * `startCamera` / `startMic` / `startPosture`, detach on the matching
- * stop or unmount. Capability-gated: on devices without `mediaDevices`
- * the camera/mic start methods become no-ops; posture works without
- * mediaDevices but needs DeviceMotion.
- *
- * Phase 2.1: BreathMic and VoiceAnalyser share one MediaStream + one
- * AudioContext so the platform doesn't fight us over the microphone.
+ * Lifecycle is explicit. Mutual exclusion: face mesh and HRV both
+ * need a camera; the platform only opens one at a time, so starting
+ * one stops the other.
  */
 
 import {
@@ -28,6 +23,7 @@ import { detectCapabilities, type Capabilities } from "@/lib/capability";
 import {
   getPermission,
   requestCamera,
+  requestCameraFront,
   requestMicrophone,
   requestMotion,
   type PermissionRecord,
@@ -37,9 +33,19 @@ import { BreathMic, type BreathReading } from "./BreathMic";
 import { VoiceAnalyser, type VoiceReading } from "./VoiceAnalyser";
 import { PostureSensor, type PostureReading } from "./PostureSensor";
 import {
+  FaceMesh,
+  type EyeReading,
+  type FaceReading,
+  type PupilReading,
+} from "./FaceMesh";
+import {
   computeCoherence,
   type CoherenceOutput,
 } from "./CoherenceLoop";
+import {
+  classifyMeditationState,
+  type MeditationStateOutput,
+} from "./meditation-state";
 
 type Status = "idle" | "starting" | "running" | "denied" | "unsupported";
 
@@ -52,10 +58,15 @@ export type BiometricState = {
   breath: BreathReading | null;
   voice: VoiceReading | null;
   posture: PostureReading | null;
+  face: FaceReading | null;
+  eye: EyeReading | null;
+  pupil: PupilReading | null;
   coherence: CoherenceOutput;
+  meditationState: MeditationStateOutput;
   cameraStatus: Status;
   micStatus: Status;
   postureStatus: Status;
+  faceMeshStatus: Status;
 };
 
 type BiometricContextValue = BiometricState & {
@@ -65,10 +76,13 @@ type BiometricContextValue = BiometricState & {
   stopMic: () => void;
   startPosture: () => Promise<void>;
   stopPosture: () => void;
+  startFaceMesh: () => Promise<void>;
+  stopFaceMesh: () => void;
   setTargetBreathBpm: (bpm: number) => void;
 };
 
 const ZERO_COHERENCE: CoherenceOutput = { coherence: 0, depth: 0, drift: 0 };
+const ZERO_MED: MeditationStateOutput = { state: "alert", confidence: 0 };
 const NULL_PERMISSION: PermissionRecord = { state: "unknown", decidedAt: null };
 
 const BioCtx = createContext<BiometricContextValue | null>(null);
@@ -82,15 +96,20 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
   const [breath, setBreath] = useState<BreathReading | null>(null);
   const [voice, setVoice] = useState<VoiceReading | null>(null);
   const [posture, setPosture] = useState<PostureReading | null>(null);
+  const [face, setFace] = useState<FaceReading | null>(null);
+  const [eye, setEye] = useState<EyeReading | null>(null);
+  const [pupil, setPupil] = useState<PupilReading | null>(null);
   const [cameraStatus, setCameraStatus] = useState<Status>("idle");
   const [micStatus, setMicStatus] = useState<Status>("idle");
   const [postureStatus, setPostureStatus] = useState<Status>("idle");
+  const [faceMeshStatus, setFaceMeshStatus] = useState<Status>("idle");
   const [targetBreathBpm, setTargetBreathBpm] = useState(6);
 
   const hrvRef = useRef<HRVCamera | null>(null);
   const breathRef = useRef<BreathMic | null>(null);
   const voiceRef = useRef<VoiceAnalyser | null>(null);
   const postureRef = useRef<PostureSensor | null>(null);
+  const faceRef = useRef<FaceMesh | null>(null);
   const micCtxRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
 
@@ -103,8 +122,25 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
     if (!caps.hasMediaDevices) {
       setCameraStatus("unsupported");
       setMicStatus("unsupported");
+      setFaceMeshStatus("unsupported");
     }
     if (!caps.deviceMotion) setPostureStatus("unsupported");
+  }, []);
+
+  const stopFaceMesh = useCallback(() => {
+    faceRef.current?.stop();
+    faceRef.current = null;
+    setFace(null);
+    setEye(null);
+    setPupil(null);
+    setFaceMeshStatus("idle");
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    hrvRef.current?.stop();
+    hrvRef.current = null;
+    setHrv(null);
+    setCameraStatus("idle");
   }, []);
 
   const startCamera = useCallback(async () => {
@@ -113,6 +149,16 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (cameraStatus === "running" || cameraStatus === "starting") return;
+    // Mutual exclusion — face mesh uses the front camera; mobile can
+    // only open one camera at a time, so stop face mesh first.
+    if (faceRef.current) {
+      faceRef.current.stop();
+      faceRef.current = null;
+      setFace(null);
+      setEye(null);
+      setPupil(null);
+      setFaceMeshStatus("idle");
+    }
     setCameraStatus("starting");
     const stream = await requestCamera({ facingMode: "environment", torch: true });
     setCameraPermission(getPermission("camera"));
@@ -133,13 +179,6 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
     }
   }, [capabilities, cameraStatus]);
 
-  const stopCamera = useCallback(() => {
-    hrvRef.current?.stop();
-    hrvRef.current = null;
-    setHrv(null);
-    setCameraStatus("idle");
-  }, []);
-
   const startMic = useCallback(async () => {
     if (!capabilities?.hasMediaDevices || !capabilities.webaudio) {
       setMicStatus("unsupported");
@@ -154,8 +193,6 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
       return;
     }
     micStreamRef.current = stream;
-
-    // Single shared AudioContext so both analysers cooperate.
     const Ctor =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext })
@@ -170,21 +207,17 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
       try {
         await ctx.resume();
       } catch {
-        /* fall through */
+        /* */
       }
     }
-
     const breathInst = new BreathMic();
     const voiceInst = new VoiceAnalyser();
     breathRef.current = breathInst;
     voiceRef.current = voiceInst;
     breathInst.subscribe(setBreath);
     voiceInst.subscribe(setVoice);
-
     try {
       await breathInst.start(stream, ctx);
-      // Voice worklet load can fail if the worklet file is missing —
-      // tolerate that without nuking breath capture.
       try {
         await voiceInst.start(stream, ctx);
       } catch {
@@ -254,6 +287,42 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
     setPostureStatus("idle");
   }, []);
 
+  const startFaceMesh = useCallback(async () => {
+    if (!capabilities?.hasMediaDevices) {
+      setFaceMeshStatus("unsupported");
+      return;
+    }
+    if (faceMeshStatus === "running" || faceMeshStatus === "starting") return;
+    if (hrvRef.current) {
+      hrvRef.current.stop();
+      hrvRef.current = null;
+      setHrv(null);
+      setCameraStatus("idle");
+    }
+    setFaceMeshStatus("starting");
+    const stream = await requestCameraFront();
+    setCameraPermission(getPermission("camera"));
+    if (!stream) {
+      setFaceMeshStatus("denied");
+      return;
+    }
+    const fm = new FaceMesh();
+    faceRef.current = fm;
+    fm.subscribe((frame) => {
+      setFace(frame.face);
+      setEye(frame.eye);
+      setPupil(frame.pupil);
+    });
+    try {
+      await fm.start(stream);
+      setFaceMeshStatus("running");
+    } catch {
+      fm.stop();
+      faceRef.current = null;
+      setFaceMeshStatus("denied");
+    }
+  }, [capabilities, faceMeshStatus]);
+
   // Cleanup on unmount.
   useEffect(() => {
     return () => {
@@ -261,6 +330,7 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
       breathRef.current?.stop();
       voiceRef.current?.stop();
       postureRef.current?.stop();
+      faceRef.current?.stop();
       if (micStreamRef.current) {
         micStreamRef.current.getTracks().forEach((t) => t.stop());
         micStreamRef.current = null;
@@ -277,6 +347,11 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
     return computeCoherence({ hrv, breath, targetBreathBpm });
   }, [hrv, breath, targetBreathBpm]);
 
+  const meditationState = useMemo<MeditationStateOutput>(() => {
+    if (!hrv && !breath && !posture && !eye) return ZERO_MED;
+    return classifyMeditationState({ hrv, breath, posture, eye });
+  }, [hrv, breath, posture, eye]);
+
   const value = useMemo<BiometricContextValue>(
     () => ({
       capabilities,
@@ -287,16 +362,23 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
       breath,
       voice,
       posture,
+      face,
+      eye,
+      pupil,
       coherence,
+      meditationState,
       cameraStatus,
       micStatus,
       postureStatus,
+      faceMeshStatus,
       startCamera,
       stopCamera,
       startMic,
       stopMic,
       startPosture,
       stopPosture,
+      startFaceMesh,
+      stopFaceMesh,
       setTargetBreathBpm,
     }),
     [
@@ -308,16 +390,23 @@ export function BiometricProvider({ children }: { children: ReactNode }) {
       breath,
       voice,
       posture,
+      face,
+      eye,
+      pupil,
       coherence,
+      meditationState,
       cameraStatus,
       micStatus,
       postureStatus,
+      faceMeshStatus,
       startCamera,
       stopCamera,
       startMic,
       stopMic,
       startPosture,
       stopPosture,
+      startFaceMesh,
+      stopFaceMesh,
     ],
   );
 

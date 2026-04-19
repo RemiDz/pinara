@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * /biometric-harness — Phase 2.1.
+ * /biometric-harness — Phase 2.2.
  *
- * Live HRV + breath + voice F0 + posture. Coherence + depth derived
- * from the streams via CoherenceLoop. Phase 2.2 will add face mesh
- * + eye + pupil panels, plus the meditation-state classifier.
+ * Five panels: HRV, Breath, Voice, Posture, Face mesh.
+ * Fusion area shows coherence + depth + meditation state.
+ *
+ * Face mesh and HRV camera are mutually exclusive — both need a
+ * camera and mobile devices can only open one at a time. Starting
+ * one stops the other.
  */
 
 import { useEffect, useRef } from "react";
@@ -44,7 +47,7 @@ function Inner() {
 
   return (
     <main className="min-h-[100dvh] bg-chamber p-6 text-lunar-silver">
-      <div className="mx-auto max-w-3xl space-y-6 font-sans">
+      <div className="mx-auto max-w-4xl space-y-6 font-sans">
         <header>
           <h1 className="text-lg font-semibold text-pineal-gold">
             {t("biometric.harness.title")}
@@ -66,6 +69,7 @@ function Inner() {
             {bio.capabilities.hasMediaDevices ? <BreathPanel /> : null}
             {bio.capabilities.hasMediaDevices ? <VoicePanel /> : null}
             <PosturePanel />
+            {bio.capabilities.hasMediaDevices ? <FacePanel /> : null}
           </div>
         )}
       </div>
@@ -79,9 +83,20 @@ function FusionPanel() {
   if (!bio) return null;
   return (
     <div className="rounded-2xl bg-indigo-deep/60 p-5 backdrop-blur">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <Metric label={t("biometric.coherence")} value={bio.coherence.coherence} />
         <Metric label={t("biometric.depth")} value={bio.coherence.depth} />
+        <div className="text-center">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
+            {t("biometric.meditation_state")}
+          </div>
+          <div className="mt-1 font-oracle text-2xl text-pineal-gold">
+            {t(`biometric.state.${bio.meditationState.state}`)}
+          </div>
+          <div className="mt-0.5 text-[10px] text-lunar-silver/45">
+            {Math.round(bio.meditationState.confidence * 100)}%
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -103,29 +118,18 @@ function HRVPanel() {
   const bio = useBiometrics();
   const traceRef = useRef<HTMLCanvasElement | null>(null);
   const samplesRef = useRef<number[]>([]);
-
   useEffect(() => {
     if (!bio?.hrv) return;
     samplesRef.current.push(bio.hrv.envelopeSample);
     if (samplesRef.current.length > 240) samplesRef.current.shift();
     drawTrace(traceRef.current, samplesRef.current, "#E8B86D");
   }, [bio?.hrv]);
-
   if (!bio) return null;
-
   const status = bio.cameraStatus;
   return (
-    <Panel
-      title={t("biometric.hrv.label")}
-      quality={bio.hrv?.signalQuality ?? 0}
-    >
+    <Panel title={t("biometric.hrv.label")} quality={bio.hrv?.signalQuality ?? 0}>
       <BigNumber value={bio.hrv?.bpm ?? "—"} unit={t("biometric.hrv.bpm")} />
-      <canvas
-        ref={traceRef}
-        width={400}
-        height={48}
-        className="mt-3 h-12 w-full rounded bg-black/40"
-      />
+      <canvas ref={traceRef} width={400} height={48} className="mt-3 h-12 w-full rounded bg-black/40" />
       <Caption>
         {status === "running" && (bio.hrv?.bpm ?? null) === null
           ? t("biometric.hrv.calibrating")
@@ -135,21 +139,14 @@ function HRVPanel() {
       </Caption>
       <ButtonRow>
         {status === "running" ? (
-          <SecondaryButton onClick={() => bio.stopCamera()}>
-            {t("biometric.stop")}
-          </SecondaryButton>
+          <SecondaryButton onClick={() => bio.stopCamera()}>{t("biometric.stop")}</SecondaryButton>
         ) : (
-          <PrimaryButton
-            disabled={status === "starting"}
-            onClick={() => void bio.startCamera()}
-          >
+          <PrimaryButton disabled={status === "starting"} onClick={() => void bio.startCamera()}>
             {status === "starting" ? "…" : t("biometric.start_camera")}
           </PrimaryButton>
         )}
       </ButtonRow>
-      {status === "denied" ? (
-        <Hint>{t("permission.camera.prompt")}</Hint>
-      ) : null}
+      {status === "denied" ? <Hint>{t("permission.camera.prompt")}</Hint> : null}
     </Panel>
   );
 }
@@ -159,29 +156,18 @@ function BreathPanel() {
   const bio = useBiometrics();
   const traceRef = useRef<HTMLCanvasElement | null>(null);
   const samplesRef = useRef<number[]>([]);
-
   useEffect(() => {
     if (!bio?.breath) return;
     samplesRef.current.push(bio.breath.envelopeSample);
     if (samplesRef.current.length > 240) samplesRef.current.shift();
     drawTrace(traceRef.current, samplesRef.current, "#C094E8");
   }, [bio?.breath]);
-
   if (!bio) return null;
-
   const status = bio.micStatus;
   return (
-    <Panel
-      title={t("biometric.breath.label")}
-      quality={bio.breath?.signalQuality ?? 0}
-    >
+    <Panel title={t("biometric.breath.label")} quality={bio.breath?.signalQuality ?? 0}>
       <BigNumber value={bio.breath?.bpm ?? "—"} unit={t("biometric.breath.bpm")} />
-      <canvas
-        ref={traceRef}
-        width={400}
-        height={48}
-        className="mt-3 h-12 w-full rounded bg-black/40"
-      />
+      <canvas ref={traceRef} width={400} height={48} className="mt-3 h-12 w-full rounded bg-black/40" />
       <Caption>
         {status === "running" && (bio.breath?.bpm ?? null) === null
           ? t("biometric.breath.calibrating")
@@ -191,21 +177,14 @@ function BreathPanel() {
       </Caption>
       <ButtonRow>
         {status === "running" ? (
-          <SecondaryButton onClick={() => bio.stopMic()}>
-            {t("biometric.stop")}
-          </SecondaryButton>
+          <SecondaryButton onClick={() => bio.stopMic()}>{t("biometric.stop")}</SecondaryButton>
         ) : (
-          <PrimaryButton
-            disabled={status === "starting"}
-            onClick={() => void bio.startMic()}
-          >
+          <PrimaryButton disabled={status === "starting"} onClick={() => void bio.startMic()}>
             {status === "starting" ? "…" : t("biometric.start_mic")}
           </PrimaryButton>
         )}
       </ButtonRow>
-      {status === "denied" ? (
-        <Hint>{t("permission.microphone.prompt")}</Hint>
-      ) : null}
+      {status === "denied" ? <Hint>{t("permission.microphone.prompt")}</Hint> : null}
     </Panel>
   );
 }
@@ -215,33 +194,20 @@ function VoicePanel() {
   const bio = useBiometrics();
   const traceRef = useRef<HTMLCanvasElement | null>(null);
   const samplesRef = useRef<number[]>([]);
-
   useEffect(() => {
     if (!bio?.voice) return;
     samplesRef.current.push(bio.voice.envelopeSample);
     if (samplesRef.current.length > 240) samplesRef.current.shift();
     drawTrace(traceRef.current, samplesRef.current, "#94C0E8");
   }, [bio?.voice]);
-
   if (!bio) return null;
-
-  // Voice shares the mic stream. The Begin button is on the breath
-  // panel; this panel is read-only in Phase 2.1.
   const f0 = bio.voice?.f0 ?? null;
   const active = bio.voice?.voiceActive ?? false;
   const status = bio.micStatus;
   return (
     <Panel title={t("biometric.voice.label")} quality={bio.voice?.signalQuality ?? 0}>
-      <BigNumber
-        value={f0 != null ? f0.toFixed(1) : "—"}
-        unit={t("biometric.voice.hz")}
-      />
-      <canvas
-        ref={traceRef}
-        width={400}
-        height={48}
-        className="mt-3 h-12 w-full rounded bg-black/40"
-      />
+      <BigNumber value={f0 != null ? f0.toFixed(1) : "—"} unit={t("biometric.voice.hz")} />
+      <canvas ref={traceRef} width={400} height={48} className="mt-3 h-12 w-full rounded bg-black/40" />
       <Caption>
         {status !== "running"
           ? ""
@@ -259,15 +225,11 @@ function PosturePanel() {
   const { t } = useI18n();
   const bio = useBiometrics();
   if (!bio) return null;
-
   const status = bio.postureStatus;
   const reading = bio.posture;
   const orientationKey = `biometric.orientation.${reading?.orientation ?? "unknown"}`;
   return (
-    <Panel
-      title={t("biometric.posture.label")}
-      quality={reading?.stillness ?? 0}
-    >
+    <Panel title={t("biometric.posture.label")} quality={reading?.stillness ?? 0}>
       <div className="grid grid-cols-2 gap-3 text-center">
         <div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
@@ -281,45 +243,98 @@ function PosturePanel() {
           <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
             {t("biometric.posture.orientation")}
           </div>
-          <div className="mt-1 font-oracle text-base text-lunar-silver">
-            {t(orientationKey)}
-          </div>
+          <div className="mt-1 font-oracle text-base text-lunar-silver">{t(orientationKey)}</div>
         </div>
       </div>
       <ButtonRow>
         {status === "unsupported" ? (
           <Hint>{t("biometric.posture.unsupported")}</Hint>
         ) : status === "running" ? (
-          <SecondaryButton onClick={() => bio.stopPosture()}>
-            {t("biometric.stop")}
-          </SecondaryButton>
+          <SecondaryButton onClick={() => bio.stopPosture()}>{t("biometric.stop")}</SecondaryButton>
         ) : (
-          <PrimaryButton
-            disabled={status === "starting"}
-            onClick={() => void bio.startPosture()}
-          >
+          <PrimaryButton disabled={status === "starting"} onClick={() => void bio.startPosture()}>
             {status === "starting" ? "…" : t("biometric.start_posture")}
           </PrimaryButton>
         )}
       </ButtonRow>
-      {status === "denied" ? (
-        <Hint>{t("permission.motion.prompt")}</Hint>
-      ) : null}
+      {status === "denied" ? <Hint>{t("permission.motion.prompt")}</Hint> : null}
     </Panel>
   );
 }
 
-// -------- shared panel chrome --------
+function FacePanel() {
+  const { t } = useI18n();
+  const bio = useBiometrics();
+  if (!bio) return null;
+  const status = bio.faceMeshStatus;
+  const eye = bio.eye;
+  const pupil = bio.pupil;
+  const face = bio.face;
+  const quality = face?.confidence ?? 0;
+  return (
+    <Panel title={t("biometric.face.label")} quality={quality}>
+      <div className="grid grid-cols-2 gap-3 text-center">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
+            {face?.facePresent
+              ? eye?.eyesClosed
+                ? t("biometric.face.eye_closed")
+                : t("biometric.face.eye_open")
+              : t("biometric.face.absent")}
+          </div>
+          <div className="mt-1 font-oracle text-3xl text-pineal-gold">
+            {eye?.ear != null ? eye.ear.toFixed(2) : "—"}
+          </div>
+          <div className="mt-0.5 text-[10px] text-lunar-silver/55">EAR</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
+            {t("biometric.face.blink_rate")}
+          </div>
+          <div className="mt-1 font-oracle text-3xl text-pineal-gold">
+            {eye?.blinkRate ?? "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
+            {t("biometric.face.pupil")}
+          </div>
+          <div className="mt-1 font-oracle text-2xl text-lunar-silver">
+            {pupil?.relativeSize != null ? pupil.relativeSize.toFixed(3) : "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
+            {t("biometric.face.gaze")}
+          </div>
+          <div className="mt-1 font-oracle text-base text-lunar-silver">
+            {eye?.gaze ? `${eye.gaze.x.toFixed(2)}, ${eye.gaze.y.toFixed(2)}` : "—"}
+          </div>
+        </div>
+      </div>
+      <Caption>
+        {status === "starting" ? t("biometric.face.loading_model") : ""}
+      </Caption>
+      <ButtonRow>
+        {status === "running" ? (
+          <SecondaryButton onClick={() => bio.stopFaceMesh()}>{t("biometric.stop")}</SecondaryButton>
+        ) : (
+          <PrimaryButton disabled={status === "starting"} onClick={() => void bio.startFaceMesh()}>
+            {status === "starting" ? "…" : t("biometric.start_face")}
+          </PrimaryButton>
+        )}
+      </ButtonRow>
+      {bio.cameraStatus === "running" || status === "starting" ? (
+        <Hint>{t("biometric.face.conflict")}</Hint>
+      ) : null}
+      {status === "denied" ? <Hint>{t("permission.camera.prompt")}</Hint> : null}
+    </Panel>
+  );
+}
 
-function Panel({
-  title,
-  quality,
-  children,
-}: {
-  title: string;
-  quality: number;
-  children: React.ReactNode;
-}) {
+// ---- shared chrome ----
+
+function Panel({ title, quality, children }: { title: string; quality: number; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl bg-indigo-deep/60 p-4 backdrop-blur">
       <header className="mb-3 flex items-baseline justify-between">
@@ -335,34 +350,20 @@ function BigNumber({ value, unit }: { value: number | string; unit: string }) {
   return (
     <div className="text-center">
       <div className="font-oracle text-5xl text-lunar-silver">{value}</div>
-      <div className="mt-1 text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">
-        {unit}
-      </div>
+      <div className="mt-1 text-[10px] uppercase tracking-[0.25em] text-lunar-silver/55">{unit}</div>
     </div>
   );
 }
 
 function Caption({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-3 min-h-[1.25em] text-[11px] text-lunar-silver/60">
-      {children}
-    </div>
-  );
+  return <div className="mt-3 min-h-[1.25em] text-[11px] text-lunar-silver/60">{children}</div>;
 }
 
 function ButtonRow({ children }: { children: React.ReactNode }) {
   return <div className="mt-2 flex gap-2">{children}</div>;
 }
 
-function PrimaryButton({
-  disabled,
-  onClick,
-  children,
-}: {
-  disabled?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function PrimaryButton({ disabled, onClick, children }: { disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -375,13 +376,7 @@ function PrimaryButton({
   );
 }
 
-function SecondaryButton({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function SecondaryButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -394,21 +389,12 @@ function SecondaryButton({
 }
 
 function Hint({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-2 text-[11px] text-lunar-silver/60">{children}</p>
-  );
+  return <p className="mt-2 text-[11px] text-lunar-silver/60">{children}</p>;
 }
 
 function SignalDot({ quality }: { quality: number }) {
-  const colour =
-    quality >= 0.7 ? "#7AC489" : quality >= 0.4 ? "#E8B86D" : "#5A6168";
-  return (
-    <span
-      className="inline-block h-2 w-2 rounded-full"
-      style={{ background: colour }}
-      aria-hidden
-    />
-  );
+  const colour = quality >= 0.7 ? "#7AC489" : quality >= 0.4 ? "#E8B86D" : "#5A6168";
+  return <span className="inline-block h-2 w-2 rounded-full" style={{ background: colour }} aria-hidden />;
 }
 
 function drawTrace(canvas: HTMLCanvasElement | null, samples: number[], colour: string) {

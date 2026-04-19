@@ -124,6 +124,41 @@ export async function requestCamera(opts?: {
 }
 
 /**
+ * Request the front-facing camera (no torch). Used by FaceMesh.
+ * Returns null on failure / denial. Mutually exclusive with
+ * `requestCamera({ facingMode: 'environment' })` on mobile because
+ * the platform can only open one camera at a time.
+ */
+export async function requestCameraFront(): Promise<MediaStream | null> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    setPermission("camera", "denied");
+    return null;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 30, max: 30 },
+      },
+    });
+    setPermission("camera", "granted");
+    return stream;
+  } catch (err) {
+    const name = (err as Error).name;
+    setPermission(
+      "camera",
+      name === "NotAllowedError" || name === "PermissionDeniedError"
+        ? "denied"
+        : "dismissed",
+    );
+    return null;
+  }
+}
+
+/**
  * Request microphone. Constraints minimise echo cancellation /
  * gain control because we want raw envelope information.
  */
