@@ -24,6 +24,12 @@ export class HarmonicLayer {
     this.gain.gain.linearRampToValueAtTime(0.06, now + 12);
   }
 
+  setGain(value: number, glideSec = 0.4): void {
+    if (!this.gain) return;
+    this.gain.gain.cancelScheduledValues(Tone.now());
+    this.gain.gain.rampTo(value, glideSec);
+  }
+
   fadeOut(now: number, durationSec: number) {
     this.gain?.gain.cancelScheduledValues(now);
     this.gain?.gain.linearRampToValueAtTime(0, now + durationSec);

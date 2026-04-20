@@ -28,6 +28,20 @@ export class DroneLayer {
     this.gain.gain.linearRampToValueAtTime(0.22, now + 8);
   }
 
+  /** Retune drone fundamental over `glideSec` seconds. */
+  retune(hz: number, glideSec = 2): void {
+    if (!this.osc) return;
+    this.osc.frequency.cancelScheduledValues(Tone.now());
+    this.osc.frequency.rampTo(hz, glideSec);
+  }
+
+  /** Live target gain (post fade-in baseline). */
+  setGain(value: number, glideSec = 0.4): void {
+    if (!this.gain) return;
+    this.gain.gain.cancelScheduledValues(Tone.now());
+    this.gain.gain.rampTo(value, glideSec);
+  }
+
   fadeOut(now: number, durationSec: number) {
     this.gain?.gain.cancelScheduledValues(now);
     this.gain?.gain.linearRampToValueAtTime(0, now + durationSec);
