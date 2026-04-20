@@ -129,6 +129,30 @@ export const STRINGS: Record<Locale, Dict> = {
     "biometric.state.focused": "Focused",
     "biometric.state.absorbed": "Absorbed",
     "biometric.state.deep": "Deep",
+
+    "strata.surface": "Surface",
+    "strata.resonance_field": "Resonance Field",
+    "strata.inner_sky": "Inner Sky",
+    "strata.oracle": "Oracle",
+    "strata.sacred_geometry": "Sacred Geometry",
+    "strata.chamber_ar": "Chamber",
+    "strata.the_flame": "The Flame",
+    "strata.unlocked": "A new stratum has opened.",
+
+    "xr.probing": "Reading the chamber…",
+    "xr.unsupported": "Augmented reality is not supported on this device. The chamber renders in 2D here.",
+    "xr.enter": "Enter the chamber",
+    "xr.in_session": "In the chamber.",
+
+    "oracle.tap_to_receive": "Receive an oracle",
+    "oracle.thinking": "Listening…",
+
+    "gates.title": "Gates",
+    "gates.coming": "Coming gates",
+    "gates.window_open": "The field is open.",
+
+    "wearable.bluetooth_unsupported": "Bluetooth devices need Chromium. Use Chrome / Edge on Android.",
+    "wearable.midi_unsupported": "Web MIDI needs Chromium. Use Chrome / Edge on desktop or Android.",
   },
   lt: {
     "app.name": "Pinara",
@@ -244,6 +268,30 @@ export const STRINGS: Record<Locale, Dict> = {
     "biometric.state.focused": "Susikaupęs",
     "biometric.state.absorbed": "Įsigilinęs",
     "biometric.state.deep": "Gilus",
+
+    "strata.surface": "Paviršius",
+    "strata.resonance_field": "Rezonanso laukas",
+    "strata.inner_sky": "Vidinis dangus",
+    "strata.oracle": "Orakulas",
+    "strata.sacred_geometry": "Šventoji geometrija",
+    "strata.chamber_ar": "Kambarys",
+    "strata.the_flame": "Liepsna",
+    "strata.unlocked": "Atsivėrė naujas sluoksnis.",
+
+    "xr.probing": "Skaitomas kambarys…",
+    "xr.unsupported": "Papildyta realybė šiame įrenginyje nepalaikoma. Kambarys čia rodomas 2D.",
+    "xr.enter": "Įeiti į kambarį",
+    "xr.in_session": "Kambaryje.",
+
+    "oracle.tap_to_receive": "Gauti orakulo žodį",
+    "oracle.thinking": "Klausoma…",
+
+    "gates.title": "Vartai",
+    "gates.coming": "Artimiausi vartai",
+    "gates.window_open": "Laukas atviras.",
+
+    "wearable.bluetooth_unsupported": "Bluetooth įrenginiams reikia Chromium. Naudokite Chrome / Edge Android'e.",
+    "wearable.midi_unsupported": "Web MIDI reikia Chromium. Naudokite Chrome / Edge kompiuteryje arba Android'e.",
   },
 };
 

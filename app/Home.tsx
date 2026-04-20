@@ -15,6 +15,8 @@ import { CosmicProvider, useCosmic } from "@/components/cosmic/CosmicContext";
 import { BiometricProvider } from "@/components/biometrics/BiometricContext";
 import { I18nProvider, useI18n } from "@/lib/i18n-react";
 import { GlandContainer } from "@/components/gland/GlandContainer";
+import { StratumIndicator } from "@/components/ui/StratumIndicator";
+import { Echo } from "@/components/ui/Echo";
 import { IntentSelector } from "@/components/session/IntentSelector";
 import { useSessionController } from "@/components/session/SessionController";
 import { DarknessLayer } from "@/components/ui/DarknessLayer";
@@ -173,6 +175,11 @@ function Inner() {
         </p>
       ) : null}
 
+      {/* Stratum indicator — top right */}
+      <div className="pointer-events-none absolute right-4 top-4">
+        <StratumIndicator />
+      </div>
+
       {/* Language switch — bottom right */}
       <a
         href={locale === "en" ? "/lt" : "/"}
@@ -181,6 +188,7 @@ function Inner() {
         {t("footer.lang_switch")}
       </a>
 
+      <Echo />
       <CapabilityBanner />
       <DarknessLayer active={phase === "running"} onIntensityChange={setIntensity} />
     </main>
