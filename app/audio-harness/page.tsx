@@ -24,6 +24,7 @@ const LAYER_LABELS: Record<LayerName, string> = {
   drone: "Drone",
   harmonic: "Solfeggio",
   schumann: "Schumann",
+  isochronic: "Isochronic",
 };
 
 type LayerState = { muted: boolean; soloed: boolean };
@@ -39,6 +40,7 @@ export default function AudioHarness() {
     drone: { muted: false, soloed: false },
     harmonic: { muted: false, soloed: false },
     schumann: { muted: false, soloed: false },
+    isochronic: { muted: false, soloed: false },
   });
   const engineRef = useRef<AudioEngine | null>(null);
   const composerRef = useRef<Composer | null>(null);
@@ -183,7 +185,9 @@ export default function AudioHarness() {
                         ? liveParams.droneGain
                         : layer === "harmonic"
                           ? liveParams.harmonicGain
-                          : liveParams.schumannGain
+                          : layer === "schumann"
+                            ? liveParams.schumannGain
+                            : liveParams.isochronicGain
                     : 0;
                   return (
                     <tr key={layer} className="border-t border-lunar-silver/10">
