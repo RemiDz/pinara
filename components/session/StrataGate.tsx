@@ -1,20 +1,28 @@
 "use client";
 
 /**
- * StrataGate — Phase 1 placeholder.
- *
- * Phase 4 owns the real implementation. In Phase 1, all gates are open
- * (no progression system yet) so this component simply renders its
- * children.
+ * StrataGate — gates child content behind a stratum unlock or a
+ * specific feature key. Phase 4 ships the real implementation.
  */
 
 import type { ReactNode } from "react";
+import { isFeatureUnlocked, isStratumUnlocked, type StratumId } from "@/lib/strata";
 
-export function StrataGate({
-  children,
-}: {
-  required?: number;
+type Props = {
+  /** Render only when this stratum is unlocked */
+  required?: StratumId;
+  /** Or, render only when this feature key is unlocked */
+  feature?: string;
+  /** Render this when locked (defaults to nothing) */
+  fallback?: ReactNode;
   children: ReactNode;
-}) {
-  return <>{children}</>;
+};
+
+export function StrataGate({ required, feature, fallback = null, children }: Props) {
+  const ok = required != null
+    ? isStratumUnlocked(required)
+    : feature != null
+      ? isFeatureUnlocked(feature)
+      : true;
+  return <>{ok ? children : fallback}</>;
 }
