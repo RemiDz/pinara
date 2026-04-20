@@ -1,15 +1,18 @@
 "use client";
 
 /**
- * SessionController — wires the chosen intent to the audio engine
- * and the gland's animated state. Owns the session timer, completion
- * detection, and IndexedDB session log.
+ * SessionController — wires the chosen intent to the audio engine,
+ * the composer (live biometric → audio mutations), and the gland's
+ * animated state. Owns the session timer, completion detection, and
+ * IndexedDB session log.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AudioEngine, type ComposerSeed } from "@/components/audio/AudioEngine";
 import { useCosmic } from "@/components/cosmic/CosmicContext";
+import { useBiometrics } from "@/components/biometrics/BiometricContext";
+import { Composer } from "@/lib/composer";
 import { recordSessionCompletion, saveSessionLog } from "@/lib/storage";
 import { trackEvent } from "@/lib/analytics";
 import type { IntentDefinition, SessionLengthMin } from "@/lib/intent";
@@ -38,8 +41,10 @@ const INITIAL_STATE: SessionState = {
 
 export function useSessionController() {
   const cosmic = useCosmic();
+  const bio = useBiometrics();
   const [state, setState] = useState<SessionState>(INITIAL_STATE);
   const engineRef = useRef<AudioEngine | null>(null);
+  const composerRef = useRef<Composer | null>(null);
   const tickRef = useRef<number | null>(null);
   const seedRef = useRef<ComposerSeed | null>(null);
   const idRef = useRef<string | null>(null);
@@ -50,6 +55,7 @@ export function useSessionController() {
       setState((s) => ({ ...s, status: "ending" }));
       await engineRef.current.stop(6);
       engineRef.current = null;
+      composerRef.current = null;
       if (tickRef.current !== null) {
         window.clearInterval(tickRef.current);
         tickRef.current = null;
@@ -135,6 +141,7 @@ export function useSessionController() {
         schumannFundamentalHz: cosmic.schumann?.fundamentalHz,
       });
       engineRef.current = engine;
+      composerRef.current = new Composer(engine, intent, seed.droneHz);
       seedRef.current = seed;
       idRef.current = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
 
@@ -168,12 +175,28 @@ export function useSessionController() {
     };
   }, []);
 
+  // Feed live biometric snapshots to the composer when a session is
+  // running. Cheap — composer.update is a few maths + parameter ramps.
+  useEffect(() => {
+    if (state.status !== "running") return;
+    composerRef.current?.update({
+      hrv: bio?.hrv ?? null,
+      breath: bio?.breath ?? null,
+      voice: bio?.voice ?? null,
+      coherence: bio?.coherence ?? null,
+      schumannKp: cosmic.schumann?.kp ?? null,
+      schumannAmplitude: cosmic.schumann?.amplitude ?? null,
+    });
+  }, [state.status, bio?.hrv, bio?.breath, bio?.voice, bio?.coherence, cosmic.schumann]);
+
   return useMemo(
     () => ({
       state,
       start,
       stop: () => void stop(false),
       isActive: state.status === "running" || state.status === "preparing" || state.status === "ending",
+      getComposerLiveState: () => composerRef.current?.getLiveState() ?? null,
+      getEngineLiveParams: () => engineRef.current?.getLiveParams() ?? null,
     }),
     [state, start, stop],
   );
